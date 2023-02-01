@@ -5,6 +5,7 @@ classdef motor < handle
     properties
         name
         overloadfactor
+        peakfactor
         speedfactor
         inertia
         nomtorque
@@ -18,12 +19,13 @@ classdef motor < handle
     end
     
     methods
-        function obj = motor(motordata, overloadfactor, usedvoltage)
+        function obj = motor(motordata, overloadfactor, peakfactor, usedvoltage)
             %MOTOR Construct an instance of this class
             %   Detailed explanation goes here
             arguments (Input)
                 motordata (1,:) table
                 overloadfactor double {mustBeScalarOrEmpty}
+                peakfactor double {mustBeScalarOrEmpty}
                 usedvoltage double {mustBeScalarOrEmpty}
             end
 
@@ -32,6 +34,13 @@ classdef motor < handle
             else
                 obj.overloadfactor = overloadfactor;
             end
+
+            if isempty(peakfactor)
+                obj.peakfactor = 1;
+            else
+                obj.peakfactor = peakfactor;
+            end
+              
             
             if isempty(usedvoltage)
                 obj.speedfactor = 1;
@@ -43,7 +52,7 @@ classdef motor < handle
             obj.inertia = motordata.INERTIAkgm ;                                               % gearbox inertia is ignored
             obj.nomtorque = motordata.NOMINALTORQUENm;                                           % no overload continuous torque
             obj.rmstorque = obj.nomtorque * obj.overloadfactor;
-            obj.peaktorque = motordata.PEAKTORQUENm;                                              % allowable peak torque (controller limited)                                      
+            obj.peaktorque = obj.nomtorque * obj.peakfactor;                                              % allowable peak torque (controller limited)                                      
             obj.stalltorque= motordata.STALLTORQUENm;                                            % not achievable in most setups
             obj.nomspeed = 	motordata.NOMINALSPEEDrpm * 2 * pi /60 * obj.speedfactor;                     % RPM to rad/s
             obj.noloadspeed = motordata.NOLOADSPEEDrpm * 2 * pi /60 * obj.speedfactor;

@@ -461,7 +461,7 @@ classdef geareval < handle
                 legend({'motor acceleration with spring','motor acceleration without spring'},"Location","best");
                 xlabel('Time (s)')
                 ylabel('Acceleration (rad/s²)')
-                title("Motor velocity, profile = " + obj.profile.description +", N="  + string(Nsel) +", K=" +string(Ksel) + " Nm/rad")
+                title("Motor acceleration, profile = " + obj.profile.description +", N="  + string(Nsel) +", K=" +string(Ksel) + " Nm/rad")
                 hold off
 
             elseif ~isempty(Nsel)
