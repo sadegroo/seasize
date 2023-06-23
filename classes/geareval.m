@@ -243,6 +243,7 @@ classdef geareval < handle
                 plot(Krange_eval(idxminmrms(:)),Nrange_eval, 'r');
                 hold off
                 title('relative rms torque');
+                colorbar;
                 
                 obj.NKfigPmaxContour = figure;
                 [C2,h2] = contourf(X,Y,pspring_peak_rel, 0:0.1:1.5);
@@ -254,6 +255,7 @@ classdef geareval < handle
                 plot(Krange_eval(idxminpmax(:)),Nrange_eval, 'g');
                 hold off
                 title('relative peak absolute power');
+                colorbar;
 
                 obj.NKfigPavgContour = figure;
                 [C3,h3] = contourf(X,Y,pspring_avg_rel, 0:0.1:1.1);
@@ -265,6 +267,7 @@ classdef geareval < handle
                 plot(Krange_eval(idxminpavg(:)),Nrange_eval, 'g');
                 hold off
                 title('relative average power');
+                colorbar;
 
 
             end
@@ -307,9 +310,9 @@ classdef geareval < handle
                 omega_temp = (obj.profile.anglevel + obj.profile.loadvel*obj.assistfactor/Ksel)*Nsel;
             end
 
-            omega_load_max_atmot = max(omega_temp);
+            omega_load_max_atmot = max(abs(omega_temp));
             moment_load_rms_atmot =  rms(m_temp);
-            moment_load_max_atmot = max(m_temp);
+            moment_load_max_atmot = max(abs(m_temp));
             
             results.speed_margin = (obj.mot.nomspeed - omega_load_max_atmot)/obj.mot.nomspeed;
             results.moment_margin_rms = (obj.mot.rmstorque - moment_load_rms_atmot)/obj.mot.rmstorque;

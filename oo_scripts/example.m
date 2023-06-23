@@ -16,7 +16,7 @@ stridetime = 1.2;
 % table, 1.2s stride time, 100% of internal moment as assistance, [no time
 % vector], invert load true)
 gaitprofile_inst=gaitprofile(['pat ' char(string(id))],TBL(id,:),...
-    stridetime,1,[],true);
+    stridetime,1.3,[],true);
 gaitprofile_inst.plot;
 
 %% motor data
@@ -24,8 +24,8 @@ load actuatordata.mat
 % pick 6th motor from table
 mot_id = 6;                                                 
 % construct motor instance: 
-% (38% RMS overload, 106% peak overload, [nominal voltage])
-motor_inst = motor(actuatordata(mot_id,:),1.38,2.06,[]);  
+% (38% RMS overload, 107% peak overload, [nominal voltage])
+motor_inst = motor(actuatordata(mot_id,:),1.38,2.07,[]);  
 
 %% gear evaluation
 % construct geareval instance: 

@@ -17,6 +17,7 @@ classdef motionprofile < handle
         Npoints                             % number of profile points
         poslp                               % position vector lowpass filter frequency [Hz]
         loadlp                              % load vector lowpass filter frequency [Hz]
+        psdplot (1,1) matlab.ui.Figure  % Power Spectral density plot of input signal8
         
     end
     
@@ -111,6 +112,17 @@ classdef motionprofile < handle
             % sgtitle()            
             shg
         end
+
+        function showSpectrum(obj)
+            obj.psdplot = figure();
+            [pxx,f] = periodogram(obj.angle, hamming(obj.Npoints), 1024, obj.Npoints/(obj.time(end) - obj.time(1)),"onesided","psd");
+            plot(gca,f,10*log10(pxx));
+            xlabel("Frequency [Hz]");
+            ylabel("Power spectral density [dB/Hz]")
+            title(string(obj.description) + ": " + "Power spectral density of Excitation", Interpreter="none")
+            obj.psdplot.Visible = true;
+        end
+
     end
     methods (Static)
             end
