@@ -1,2 +1,5 @@
 # List of untracked files to ignore
 *.fig
+data/CP_AE.mat
+data/CP_CG.mat
+data/TD.mat
