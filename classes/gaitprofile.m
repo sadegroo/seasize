@@ -1,15 +1,12 @@
 classdef gaitprofile < motionprofile
-    %GAITPROFILE Summary of this class goes here
-    %   Detailed explanation goes here
+    %GAITPROFILE represents one motion-load profile from gait data
     
     properties
     end
     
     methods
         function obj = gaitprofile(description, gaitdata, stridetime, assistload, assisttimevec, invertload,varargin)
-            %GAITPROFILE Construct an instance of this class
-            %   Detailed explanation goes here
-            % gaitdata should be one row of the table            
+            %GAITPROFILE 
             arguments (Input)
                 description {mustBeTextScalar}
                 gaitdata (1,:) table

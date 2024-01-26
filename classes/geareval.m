@@ -1,6 +1,6 @@
 classdef geareval < handle
-    %GEAREVAL Summary of this class goes here
-    %   Detailed explanation goes here
+    %GEAREVAL evaluation of a motor vs. motion-load profile
+    % to find a feasible reduction ratio, and simulate a series spring
     
     properties
         mot
@@ -50,7 +50,7 @@ classdef geareval < handle
                         
         end
         
-        function eval(obj,Nmax, nN, varargin)
+        function [result, fig] = eval(obj,Nmax, nN, varargin)
             arguments (Input)
                 obj geareval
                 Nmax (1,1) double        % maximum transmission ratio to evaluate
@@ -95,15 +95,19 @@ classdef geareval < handle
             cond3 = wmot > omeganorm;
             [~,idmin] = min(momentnormRms);
             %cond4 = [true(idmin,1);false(Npoints-idmin,1)];
+            Nfeas1 = N(cond1); %rms torque conditions
+            Nfeas2 = N(cond2); %peak torque conditions
             Nfeas = N(cond1&cond2&cond3); %all conditions
             %Nfeas = N(cond1&cond3); %ignore peak condition
             %Nfeasrange = [min(Nfeas),min(Nfeas)/f2; max(Nfeas),max(Nfeas)/f2];
             if isempty(Nfeas)
-                disp("No feasible reduction range found, evaluation terminated for this combination: motor="...
+                warning("No feasible reduction range found, evaluation terminated for this combination: motor="...
                     + string(obj.mot.name) + ", profile=" + string(obj.profile.description)...
                     + ", efficiency=" + string(obj.efficiency) + ", assistfactor=" + obj.assistfactor);
                 return;
             end
+            obj.results.minNTrms = min(Nfeas1)/f2;
+            obj.results.minNTmax = min(Nfeas2)/f2;
             obj.results.minN = min(Nfeas)/f2;
             obj.results.maxN = max(Nfeas)/f2;
             obj.results.optN = min(max(Nfeas),N(idmin))/f2;
@@ -112,34 +116,48 @@ classdef geareval < handle
             % -------
             obj.fig = figure();
             % rms curve
-            plot(omeganorm,momentnormRms,'b',omeganorm,cummin(momentnormRms),'b:',wmot,Tmotrms,'xb')
+            plot(omeganorm,momentnormRms,'b',omeganorm,cummin(momentnormRms),'b:',wmot,Tmotrms,'xb', MarkerSize=10)
             hold on
-            % get intersects
-            idxminmrms = obj.zci(momentnormRms-Tmotrms);
-            idxmax = obj.zci(omeganorm-wmot);
-            its1 = [omeganorm(idxminmrms(1)) Tmotrms];
-            its2 = [wmot, momentnormRms(idxmax(1))];
             % max curve
-            plot(omeganorm,momentnormMax,'r',omeganorm,cummin(momentnormMax),'r:',wmot,Tmotmax,'xr')
-            % get intersects
-            idxminpk = obj.zci(momentnormMax-Tmotmax);
-            its3 = [omeganorm(idxminpk(1)) Tmotmax];
-            its4 = [wmot, momentnormMax(idxmax(1))];
-            % plot intersects
-            plot([its1(1) its2(1)], [its1(2) its2(2)], '.b');
-            line([its1(1) wmot its2(1)],[its1(2), Tmotrms, its2(2)],'LineStyle','--');
-            plot([its3(1) its4(1)], [its3(2) its4(2)], '.r');
-            line([its3(1) wmot its4(1)],[its3(2), Tmotmax its4(2)],'LineStyle','--', 'Color', 'r');
+            plot(omeganorm,momentnormMax,'r',omeganorm,cummin(momentnormMax),'r:',wmot,Tmotmax,'xr', MarkerSize=10)
+            try
+                % get intersects
+                idxminmrms = obj.zci(momentnormRms-Tmotrms);
+                idxmax = obj.zci(omeganorm-wmot);
+                its1 = [omeganorm(idxminmrms(1)) Tmotrms];
+                its2 = [wmot, momentnormRms(idxmax(1))];
+                % plot intersects
+                plot([its1(1) its2(1)], [its1(2) its2(2)], '.b', MarkerSize=10);
+                line([its1(1) wmot its2(1)],[its1(2), Tmotrms, its2(2)],'LineStyle','--');
+            catch ME
+                warning("RMS curve intersects could not be found: motor="...
+                    + string(obj.mot.name) + ", profile=" + string(obj.profile.description)...
+                    + ", efficiency=" + string(obj.efficiency) + ", assistfactor=" + obj.assistfactor);
+            end
+            try
+                % get intersects
+                idxminpk = obj.zci(momentnormMax-Tmotmax);
+                its3 = [omeganorm(idxminpk(1)) Tmotmax];
+                its4 = [wmot, momentnormMax(idxmax(1))];
+                % plot intersects max curve
+                plot([its3(1) its4(1)], [its3(2) its4(2)], '.r', MarkerSize=10);
+                line([its3(1) wmot its4(1)],[its3(2), Tmotmax its4(2)],'LineStyle','--', 'Color', 'r');
+            catch ME
+                warning("MAX curve intersects could not be found: motor="...
+                    + string(obj.mot.name) + ", profile=" + string(obj.profile.description)...
+                    + ", efficiency=" + string(obj.efficiency) + ", assistfactor=" + obj.assistfactor);
+            end
             
             hold off
-            legend('rms norm','MLB rms', ['rms ' obj.mot.name],'max norm','MLB max', ['max ' obj.mot.name]);
+            legend({'$\omega^*-\tau_2^*$','MLB $\omega^*-\tau_2^*$', '($\omega_{mot,max}^*,\tau_{mot,2}^*$)','$\omega^*-\tau_\infty^*$','MLB $\omega^*-\tau_\infty^*$', '($\omega_{mot,max}^*,\tau_{mot,\infty}^*$)'},Interpreter="latex");
             xlim([0 2*wmot]);
-            xlabel('$\omega^*\,[\sqrt{kg\,m^2}\,rad/s]$', "Interpreter","latex", "FontSize",14);
+            xlabel('$\omega^*\,\left (\mathrm{\sqrt{kg\,m^2}\,rad/s}\right )$', "Interpreter","latex", "FontSize",12);
             ylim([0 2*Tmotmax]);
-            ylabel('$\tau^*\,[\frac{Nm}{\sqrt{kg\,m^2}}]$', "Interpreter","latex", "FontSize",14);
+            ylabel('$\tau^*\,\left (\mathrm{\frac{Nm}{\sqrt{kg\,m^2}}}\right )$', "Interpreter","latex", "FontSize",12);
+            grid on
             
-            title(obj.profile.description);
-            set(gcf,'Visible','on')
+            title("Motor " +obj.mot.name+ " vs. motion-load profile " +obj.profile.description);
+            %set(gcf,'Visible','on')
 
             if obj.issea
                 % additional SEA evaluations. Target metrics are RMS torque
@@ -237,10 +255,10 @@ classdef geareval < handle
                 obj.NKfigMrmsContour = figure;
                 [C1,h1] = contourf(X,Y,mspring_rms_rel,0.7:0.1:1.1);
                 clabel(C1,h1)
-                ylabel('Reduction Ratio [ul]', "Interpreter","none");                
-                xlabel('Spring rate [Nm/rad]', "Interpreter","none");
+                ylabel('Reduction Ratio N', "Interpreter","none");                
+                xlabel('Spring rate K (Nm/rad)', "Interpreter","none");
                 hold on
-                plot(Krange_eval(idxminmrms(:)),Nrange_eval, 'r');
+                plot(Krange_eval(idxminmrms(:)),Nrange_eval, 'r',LineWidth=1);
                 hold off
                 title('relative rms torque');
                 colorbar;
@@ -248,11 +266,11 @@ classdef geareval < handle
                 obj.NKfigPmaxContour = figure;
                 [C2,h2] = contourf(X,Y,pspring_peak_rel, 0:0.1:1.5);
                 clabel(C2,h2)
-                ylabel('Reduction Ratio [ul]', "Interpreter","none");                
-                xlabel('Spring rate [Nm/rad]', "Interpreter","none");
+                ylabel('Reduction Ratio N', "Interpreter","none");                
+                xlabel('Spring rate K (Nm/rad)', "Interpreter","none");
                 hold on
-                plot(Krange_eval(idxminmrms(:)),Nrange_eval, 'r');
-                plot(Krange_eval(idxminpmax(:)),Nrange_eval, 'g');
+                plot(Krange_eval(idxminmrms(:)),Nrange_eval, 'r',LineWidth=1);
+                %plot(Krange_eval(idxminpmax(:)),Nrange_eval, 'g');
                 hold off
                 title('relative peak absolute power');
                 colorbar;
@@ -260,18 +278,23 @@ classdef geareval < handle
                 obj.NKfigPavgContour = figure;
                 [C3,h3] = contourf(X,Y,pspring_avg_rel, 0:0.1:1.1);
                 clabel(C3,h3)
-                ylabel('Reduction Ratio [ul]', "Interpreter","none");                
-                xlabel('Spring rate [Nm/rad]', "Interpreter","none");
+                ylabel('Reduction Ratio N', "Interpreter","none");                
+                xlabel('Spring rate (Nm/rad)', "Interpreter","none");
                 hold on
-                plot(Krange_eval(idxminmrms(:)),Nrange_eval, 'r');
-                plot(Krange_eval(idxminpavg(:)),Nrange_eval, 'g');
+                plot(Krange_eval(idxminmrms(:)),Nrange_eval, 'r', LineWidth=1);
+                %plot(Krange_eval(idxminpavg(:)),Nrange_eval, 'g');
                 hold off
                 title('relative average power');
                 colorbar;
 
 
             end
-
+            
+            result = obj.results;
+            fig(1) = obj.fig;
+            fig(2) = obj.NKfigMrmsContour;
+            fig(3) = obj.NKfigPmaxContour;
+            fig(4) = obj.NKfigPavgContour;
         end
             
         function [results, fig] = margins(obj,Nsel,varargin)
@@ -353,29 +376,29 @@ classdef geareval < handle
                 plot(omega_temp,m_temp)
                 hold on
                 plot(omega_temp_nospring,m_temp_nospring)
-                plot(vec_w,vec_T,'g',-1*vec_w, -1*vec_T, 'g')
-                yline(obj(j).mot.peaktorque,'g')
-                yline(-obj(j).mot.peaktorque,'g')
-                xline(obj(j).mot.noloadspeed,'g')
-                xline(-obj(j).mot.noloadspeed,'g')
+                plot(vec_w,vec_T,'k--',-1*vec_w, -1*vec_T, 'k--')
+                yline(obj(j).mot.peaktorque,'k--')
+                yline(-obj(j).mot.peaktorque,'k--')
+                xline(obj(j).mot.noloadspeed,'k--')
+                xline(-obj(j).mot.noloadspeed,'k--')
                 xlim([-obj(j).mot.noloadspeed*1.1, obj(j).mot.noloadspeed*1.1]);
                 ylim([obj(j).mot.peaktorque*(-1.1) obj(j).mot.peaktorque*(1.1)]);
-                legend({'motor torque - velocity profile with spring', 'motor torque - velocity profile without spring', 'motor limits'}, "Location","best")
-                xlabel('Angular velocity at motor shaft (rad/s)')
-                ylabel('Torque at motor shaft (Nm)')
+                legend({'With spring', 'No spring', 'Motor limits'}, "Location","best")
+                xlabel('$\omega_{mot}$ (rad/s)', Interpreter='latex')
+                ylabel('$\tau_{mot}$ (Nm)', Interpreter='latex')
                 title("Motor physical limit check, profile=" + obj(j).profile.description + ", N=" + string(Nsel) + ", K=" +string(Ksel) + " Nm/rad")
             else
                  % Verify that profiles are withing motor physical limits due to back emf
                 plot(omega_temp,m_temp)
                 hold on
-                plot(vec_w,vec_T,'g',-1*vec_w, -1*vec_T, 'g')
-                yline(obj(j).mot.peaktorque,'g')
-                yline(-obj(j).mot.peaktorque,'g')
-                xline(obj(j).mot.noloadspeed,'g')
-                xline(-obj(j).mot.noloadspeed,'g')
+                plot(vec_w,vec_T,'k--',-1*vec_w, -1*vec_T, 'k--')
+                yline(obj(j).mot.peaktorque,'k--')
+                yline(-obj(j).mot.peaktorque,'k--')
+                xline(obj(j).mot.noloadspeed,'k--')
+                xline(-obj(j).mot.noloadspeed,'k--')
                 xlim([-obj(j).mot.noloadspeed*1.1, obj(j).mot.noloadspeed*1.1]);
                 ylim([obj(j).mot.peaktorque*(-1.1) obj(j).mot.peaktorque*(1.1)]);
-                legend({'motor torque - velocity profile without spring', 'motor limits'}, "Location","best")
+                legend({'No spring', 'motor limits'}, "Location","best")
                 xlabel('Angular velocity at motor shaft (rad/s)')
                 ylabel('Torque at motor shaft (Nm)')
                 title("Motor physical limit check, profile=" + obj(j).profile.description + ", N=" + string(Nsel))
@@ -419,7 +442,7 @@ classdef geareval < handle
             if isscalar(Ksel) && isscalar(Nsel)
                 % K and N provided
                 % profiles without spring
-                r.mnospring = (obj.profile.load*obj.assistfactor + obj.mot.inertia*Nsel^2*(obj.profile.angleaccel))/Nsel;
+                r.mnospring = obj.profile.load*obj.assistfactor/Nsel + obj.mot.inertia*Nsel*(obj.profile.angleaccel);
                 r.omeganospring = Nsel*obj.profile.anglevel;
                 r.accelnospring = Nsel*obj.profile.angleaccel;
                 r.pnospring = r.mnospring.* r.omeganospring;
@@ -499,10 +522,9 @@ classdef geareval < handle
 
             elseif isscalar(Nsel)
                 % only N provided
-                % not implemented yet
 
                 % profiles without spring
-                r.mnospring = (obj.profile.load*obj.assistfactor + obj.mot.inertia*Nsel^2*(obj.profile.angleaccel))/Nsel;
+                r.mnospring = obj.profile.load*obj.assistfactor/Nsel + obj.mot.inertia*Nsel*(obj.profile.angleaccel);
                 r.omeganospring = Nsel*obj.profile.anglevel;
                 r.accelnospring = Nsel*obj.profile.angleaccel;
                 r.pnospring = r.mnospring.* r.omeganospring;
@@ -549,15 +571,11 @@ classdef geareval < handle
 
                 % RMS motor torque, varied K
                 figs(1) = figure;
-                plot(Kspace, r.mspring_rms_rel)
-                hold on
-                yline(1,'k')
-                hold off
+                plot(Kspace, r.mspring_rms_rel)                           
                 xlabel('K (Nm/rad)')
-                ylabel('relative rms torque (ul)')
-                title("Relative motor rms torque, N="  + string(Nsel))
-                hold off
-
+                ylabel('relative rms torque')
+                title("Relative rms motor torque, N="  + string(Nsel))
+                
                 Kzci = obj.zci(r.mspring_rms_rel-1);
                 try
                     r.K_be_rms_tor = Kspace(Kzci(1));
@@ -565,22 +583,33 @@ classdef geareval < handle
                      r.K_be_rms_tor = NaN;
                 end
 
-                [~,idxmin] = min(r.mspring_rms_rel);
+                [min_rms_tor,idxmin] = min(r.mspring_rms_rel);
                 r.K_min_rms_tor = Kspace(idxmin);
+                % plot break-even and min markers
+                hold on  
+                plot(Kspace, r.pspring_max_rel)
+                plot(r.K_be_rms_tor,1,'xk','MarkerSize',10, LineWidth=1.5);
+                plot(r.K_min_rms_tor,min_rms_tor,'ok','MarkerSize',10,  LineWidth=1.5);
+                
+                xlim([Ksel(1)/2 Ksel(2)])
+                yline(1,'k--')
+                legend({'Relative rms motor torque', 'Relative peak motor power', 'K_{eq,\tau rms}', 'K_{min,\tau rms}', 'Break-even'});
+                hold off
 
 
                 % peak power, varied K
                 figs(2) = figure;
-                plot(Kspace, r.pspring_max_rel)
+                plot(Kspace, r.pspring_max_rel,'k')
                 hold on
-                yline(1,'k')
+                yline(1,'k--')
                 hold off
                 xlabel('K (Nm/rad)')
-                ylabel('relative peak power (ul)')
+                ylabel('relative peak power')
                 title("Relative motor peak power, N="  + string(Nsel))
+                xlim([Ksel(1)/2 Ksel(2)])
                 hold off
-
                 Kzci = obj.zci(r.pspring_max_rel-1);
+
                 try
                     r.K_be_pk_p = Kspace(Kzci(1));
                 catch ME
@@ -589,7 +618,9 @@ classdef geareval < handle
                 
                 [~,idxmin] = min(r.pspring_max_rel);
                 r.K_min_pk_p = Kspace(idxmin);
-
+                if r.K_min_pk_p == Ksel(2)
+                    r.K_min_pk_p = NaN;
+                end
 
                 % mean power, varied K
                 figs(3) = figure;
@@ -598,8 +629,9 @@ classdef geareval < handle
                 yline(1,'k')
                 hold off
                 xlabel('K (Nm/rad)')
-                ylabel('relative average power (ul)')
+                ylabel('relative average power')
                 title("Relative motor average power, N="  + string(Nsel))
+                xlim(Ksel(1:2))
                 hold off
 
                 Kzci = obj.zci(r.pspring_avg_rel-1);
@@ -613,26 +645,26 @@ classdef geareval < handle
                 r.K_min_avg_p = Kspace(idxmin);
 
 
-                % energy consumption, varied K
-                figs(4) = figure;
-                plot(Kspace, r.espring_rel)
-                hold on
-                yline(1,'k')
-                hold off
-                xlabel('K (Nm/rad)')
-                ylabel('relative energy consumption (ul)')
-                title("Relative energy consumption, N="  + string(Nsel))
-                hold off
+                % % energy consumption, varied K
+                % figs(4) = figure;
+                % plot(Kspace, r.espring_rel)
+                % hold on
+                % yline(1,'k')
+                % hold off
+                % xlabel('K (Nm/rad)')
+                % ylabel('relative energy consumption')
+                % title("Relative energy consumption, N="  + string(Nsel))
+                % hold off
 
-                Kzci = obj.zci(r.espring_rel-1);
-                try
-                    r.K_be_e = Kspace(Kzci(1));
-                catch ME
-                    r.K_be_e = NaN;
-                end
-                
-                [~,idxmin] = min(r.espring_rel);
-                r.K_min_e = Kspace(idxmin);
+                % Kzci = obj.zci(r.espring_rel-1);
+                % try
+                %     r.K_be_e = Kspace(Kzci(1));
+                % catch ME
+                %     r.K_be_e = NaN;
+                % end
+                % 
+                % [~,idxmin] = min(r.espring_rel);
+                % r.K_min_e = Kspace(idxmin);
                                 
             elseif isscalar(Ksel)
                 % only K provided
@@ -659,8 +691,13 @@ classdef geareval < handle
             obj=obj(:)';    % make row vector of objects
 
             for i = 1:numel(obj)
-                mins(i) = obj(i).results.minN;
-                maxs(i) = obj(i).results.maxN;
+                try 
+                    mins(i) = obj(i).results.minN;
+                    maxs(i) = obj(i).results.maxN;
+                catch ME
+                    mins(i) = NaN;
+                    maxs(i) = NaN;
+                end
             end
             
             [result.maxmin, result.maxminidx] = max(mins);
@@ -672,8 +709,8 @@ classdef geareval < handle
             set(gca,'XGrid','off','YGrid','on');
             ylim([min(mins)-10, max(maxs)+10])
             title("Feasible Reduction")
-            ylabel('Reduction ratio [ul]')
-            fig.Visible = "on";
+            ylabel('Reduction ratio N')
+            %fig.Visible = "on";
         end
     end
 

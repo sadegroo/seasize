@@ -1,6 +1,6 @@
 classdef motionprofile < handle
-    %MOTIONPROFILE Summary of this class goes here
-    %   Detailed explanation goes here
+    %MOTIONPROFILE represents a motion-load profile to be used in a
+    %geareval instance.
     
     properties
         description                         % text description of load profile
@@ -17,7 +17,7 @@ classdef motionprofile < handle
         Npoints                             % number of profile points
         poslp                               % position vector lowpass filter frequency [Hz]
         loadlp                              % load vector lowpass filter frequency [Hz]
-        psdplot (1,1) matlab.ui.Figure  % Power Spectral density plot of input signal8
+        psdplot (1,1) matlab.ui.Figure      % Power Spectral density plot of input signal
         
     end
     
@@ -84,14 +84,14 @@ classdef motionprofile < handle
             end
 
         end
-        function plot(obj)
-            figure('Name', char(obj.description))
+        function f=plot(obj)
+            f=figure('Name', char(obj.description));
             
             subplot(4,1,1);
             plot(obj.time,obj.angle);
             grid on
             ylabel({'Angle', '(rad)'})
-            title(['Motion Profile: ' char(obj.description)])
+            title(['Motion-load Profile: ' char(obj.description)])
             
             subplot(4,1,2);
             plot(obj.time,obj.anglevel);
@@ -107,7 +107,7 @@ classdef motionprofile < handle
             plot(obj.time,obj.load);
             grid on
             ylabel({'Load moment' '(Nm)'})
-            xlabel('Gait %')
+            xlabel('Time (s)')
         
             % sgtitle()            
             shg
@@ -122,10 +122,6 @@ classdef motionprofile < handle
             title(string(obj.description) + ": " + "Power spectral density of Excitation", Interpreter="none")
             obj.psdplot.Visible = true;
         end
-
     end
-    methods (Static)
-            end
-
 end
 
