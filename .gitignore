@@ -3,3 +3,7 @@
 data/CP_AE.mat
 data/CP_CG.mat
 data/TD.mat
+/thesis_figure
+shaft_conic_fit.mlx
+*.tex
+oo_scripts/Lerner_hipexo_check.mlx

@@ -12,7 +12,7 @@ classdef geareval < handle
         fig
         NKfigMrmsContour
         NKfigPmaxContour
-        NKfigPavgContour
+        NKfigPstdContour
 
     end
 
@@ -116,10 +116,10 @@ classdef geareval < handle
             % -------
             obj.fig = figure();
             % rms curve
-            plot(omeganorm,momentnormRms,'b',omeganorm,cummin(momentnormRms),'b:',wmot,Tmotrms,'xb', MarkerSize=10)
+            plot(omeganorm,momentnormRms,'b:',omeganorm,cummin(momentnormRms),'b',wmot,Tmotrms,'.b', MarkerSize=10)
             hold on
             % max curve
-            plot(omeganorm,momentnormMax,'r',omeganorm,cummin(momentnormMax),'r:',wmot,Tmotmax,'xr', MarkerSize=10)
+            plot(omeganorm,momentnormMax,'r:',omeganorm,cummin(momentnormMax),'r',wmot,Tmotmax,'.r', MarkerSize=10)
             try
                 % get intersects
                 idxminmrms = obj.zci(momentnormRms-Tmotrms);
@@ -127,7 +127,7 @@ classdef geareval < handle
                 its1 = [omeganorm(idxminmrms(1)) Tmotrms];
                 its2 = [wmot, momentnormRms(idxmax(1))];
                 % plot intersects
-                plot([its1(1) its2(1)], [its1(2) its2(2)], '.b', MarkerSize=10);
+                plot([its1(1) its2(1)], [its1(2) its2(2)], 'xb', MarkerSize=10);
                 line([its1(1) wmot its2(1)],[its1(2), Tmotrms, its2(2)],'LineStyle','--');
             catch ME
                 warning("RMS curve intersects could not be found: motor="...
@@ -140,7 +140,7 @@ classdef geareval < handle
                 its3 = [omeganorm(idxminpk(1)) Tmotmax];
                 its4 = [wmot, momentnormMax(idxmax(1))];
                 % plot intersects max curve
-                plot([its3(1) its4(1)], [its3(2) its4(2)], '.r', MarkerSize=10);
+                plot([its3(1) its4(1)], [its3(2) its4(2)], 'xr', MarkerSize=10);
                 line([its3(1) wmot its4(1)],[its3(2), Tmotmax its4(2)],'LineStyle','--', 'Color', 'r');
             catch ME
                 warning("MAX curve intersects could not be found: motor="...
@@ -150,7 +150,7 @@ classdef geareval < handle
             
             hold off
             legend({'$\omega^*-\tau_2^*$','MLB $\omega^*-\tau_2^*$', '($\omega_{mot,max}^*,\tau_{mot,2}^*$)','$\omega^*-\tau_\infty^*$','MLB $\omega^*-\tau_\infty^*$', '($\omega_{mot,max}^*,\tau_{mot,\infty}^*$)'},Interpreter="latex");
-            xlim([0 2*wmot]);
+            %xlim([0 3*wmot]);
             xlabel('$\omega^*\,\left (\mathrm{\sqrt{kg\,m^2}\,rad/s}\right )$', "Interpreter","latex", "FontSize",12);
             ylim([0 2*Tmotmax]);
             ylabel('$\tau^*\,\left (\mathrm{\frac{Nm}{\sqrt{kg\,m^2}}}\right )$', "Interpreter","latex", "FontSize",12);
@@ -161,8 +161,7 @@ classdef geareval < handle
 
             if obj.issea
                 % additional SEA evaluations. Target metrics are RMS torque
-                % reduction and average power reduction (= energy
-                % consumption reduction)
+                % reduction and standard deviation of power reduction
 
                 Nrange_eval = linspace(obj.results.minN,obj.results.maxN,nNK(1));
                 Krange_eval = linspace(Krange(1), Krange(2), nNK(2));
@@ -175,15 +174,15 @@ classdef geareval < handle
                 mspring_rms_rel = zeros(nNK(1),nNK(2));
                 pspring_peak = zeros(nNK(1),nNK(2));
                 pspring_peak_rel = zeros(nNK(1),nNK(2));
-                pspring_avg = zeros(nNK(1),nNK(2));
-                pspring_avg_rel = zeros(nNK(1),nNK(2));
+                pspring_std = zeros(nNK(1),nNK(2));
+                pspring_std_rel = zeros(nNK(1),nNK(2));
 
                 mnospring = zeros(nNK(1),obj.profile.Npoints);
                 pnospring = zeros(nNK(1),obj.profile.Npoints);
 
                 idxminmrms = zeros(nNK(1),1);
                 idxminpmax = zeros(nNK(1),1);
-                idxminpavg = zeros(nNK(1),1);                
+                idxminpstd = zeros(nNK(1),1);                
 
                 for n = 1:nNK(1)
                     Neval = Nrange_eval(n);
@@ -195,7 +194,7 @@ classdef geareval < handle
                     % no spring metrics as basis for relative "with spring" metrics
                     rms_mnospring = rms(mnospring_temp);
                     peak_pnospring = max(abs(pnospring(n,:)));
-                    avg_pnospring = trapz(obj.profile.time, pnospring(n,:))/obj.profile.period;
+                    std_pnospring = std(pnospring(n,:));
                     
 
                     for k = 1:nNK(2)
@@ -213,14 +212,14 @@ classdef geareval < handle
                         mspring_rms_rel(n,k) =  mspring_rms(n,k)/rms_mnospring;                         % relative rms torque
                         pspring_peak(n,k) = max(abs(pspring(n,k,:)));                                   % peak power
                         pspring_peak_rel(n,k) = pspring_peak(n,k)/peak_pnospring;                       % relative peak power
-                        pspring_avg(n,k) = trapz(obj.profile.time, pspring(n,k,:))/obj.profile.period;  % average power using trapezoidal integration
-                        pspring_avg_rel(n,k) = pspring_avg(n,k)/avg_pnospring;                          % relative average power                        
+                        pspring_std(n,k) = std(pspring(n,k,:));  % standard deviation of power 
+                        pspring_std_rel(n,k) = pspring_std(n,k)/std_pnospring;                          % relative std power                        
 
                                                 
                     end
                     [~, idxminmrms(n)] = min(mspring_rms_rel(n,:));  % find K which results in minimum rms torque for this reduction
                     [~, idxminpmax(n)] = min(pspring_peak_rel(n,:));  % find K which results in minimum peak power for this reduction
-                    [~, idxminpavg(n)] = min(pspring_avg_rel(n,:));  % find K which results in minimum average power for this reduction
+                    [~, idxminpstd(n)] = min(pspring_std_rel(n,:));  % find K which results in minimum std of power for this reduction
                     
                 end
 
@@ -239,11 +238,11 @@ classdef geareval < handle
                 obj.results.mspring_rms_rel = mspring_rms_rel;
                 obj.results.pspring_peak = pspring_peak;
                 obj.results.pspring_peak_rel = pspring_peak_rel;
-                obj.results.pspring_avg = pspring_avg;
-                obj.results.pspring_avg_rel = pspring_avg_rel;
+                obj.results.pspring_std = pspring_std;
+                obj.results.pspring_std_rel = pspring_std_rel;
 
                 obj.results.minpmaxcurve = Krange_eval(idxminpmax(:))'; % K value which results in minimum peak power for each value in Nrange_eval.
-                obj.results.minpavgcurve = Krange_eval(idxminpavg(:))'; % K value which results in minimum average power for each value in Nrange_eval.
+                obj.results.minpstdcurve = Krange_eval(idxminpstd(:))'; % K value which results in minimum power standard deviation for each value in Nrange_eval.
                 obj.results.minmrmscurve = Krange_eval(idxminmrms(:))'; % K value which results in minimum rms torque for each value in Nrange_eval.
                 
                 % figures
@@ -259,6 +258,7 @@ classdef geareval < handle
                 xlabel('Spring rate K (Nm/rad)', "Interpreter","none");
                 hold on
                 plot(Krange_eval(idxminmrms(:)),Nrange_eval, 'r',LineWidth=1);
+                plot(Krange_eval(idxminpstd(:)),Nrange_eval, 'g',LineWidth=1);
                 hold off
                 title('relative rms torque');
                 colorbar;
@@ -270,21 +270,21 @@ classdef geareval < handle
                 xlabel('Spring rate K (Nm/rad)', "Interpreter","none");
                 hold on
                 plot(Krange_eval(idxminmrms(:)),Nrange_eval, 'r',LineWidth=1);
-                %plot(Krange_eval(idxminpmax(:)),Nrange_eval, 'g');
+                plot(Krange_eval(idxminpstd(:)),Nrange_eval, 'g',LineWidth=1);
                 hold off
                 title('relative peak absolute power');
                 colorbar;
 
-                obj.NKfigPavgContour = figure;
-                [C3,h3] = contourf(X,Y,pspring_avg_rel, 0:0.1:1.1);
+                obj.NKfigPstdContour = figure;
+                [C3,h3] = contourf(X,Y,pspring_std_rel, 0:0.1:1.1);
                 clabel(C3,h3)
                 ylabel('Reduction Ratio N', "Interpreter","none");                
                 xlabel('Spring rate (Nm/rad)', "Interpreter","none");
                 hold on
                 plot(Krange_eval(idxminmrms(:)),Nrange_eval, 'r', LineWidth=1);
-                %plot(Krange_eval(idxminpavg(:)),Nrange_eval, 'g');
+                plot(Krange_eval(idxminpstd(:)),Nrange_eval, 'g',LineWidth=1);
                 hold off
-                title('relative average power');
+                title('relative power standard deviation');
                 colorbar;
 
 
@@ -294,7 +294,7 @@ classdef geareval < handle
             fig(1) = obj.fig;
             fig(2) = obj.NKfigMrmsContour;
             fig(3) = obj.NKfigPmaxContour;
-            fig(4) = obj.NKfigPavgContour;
+            fig(4) = obj.NKfigPstdContour;
         end
             
         function [results, fig] = margins(obj,Nsel,varargin)
@@ -464,16 +464,16 @@ classdef geareval < handle
                 r.pspring_max = max(abs(r.pspring));
                 r.pspring_max_rel =  r.pspring_max/r.pnospring_max;
 
-                % mean power
-                r.pnospring_avg = trapz(obj.profile.time, r.pnospring)/obj.profile.period;
-                r.pspring_avg = trapz(obj.profile.time, r.pspring)/obj.profile.period;
-                r.pspring_avg_rel =  r.pspring_avg/r.pnospring_avg;                
+                % std power
+                r.pnospring_std = std(r.pnospring);
+                r.pspring_std = std(r.pspring);
+                r.pspring_std_rel =  std(r.pspring_std);                
                 
                 % energy consumption
-                time = obj.profile.time;                
-                r.enospring = trapz(time, r.pnospring);
-                r.espring = trapz(time, r.pspring);
-                r.espring_rel =  r.espring/r.enospring;
+                % time = obj.profile.time;                
+                % r.enospring = trapz(time, r.pnospring);
+                % r.espring = trapz(time, r.pspring);
+                % r.espring_rel =  r.espring/r.enospring;
 
                 
                 % Motor power plot, with and without spring
@@ -533,11 +533,11 @@ classdef geareval < handle
                 r.mnospring_rms = rms(r.mnospring);
                 % peak power
                 r.pnospring_max = max(abs(r.pnospring));
-                % mean power
-                r.pnospring_avg = trapz(obj.profile.time, r.pnospring)/obj.profile.period;
+                % std power
+                r.pnospring_std = std(r.pnospring);
                 % energy consumption
-                time = obj.profile.time;                
-                r.enospring = trapz(time, r.pnospring);
+                % time = obj.profile.time;                
+                % r.enospring = trapz(time, r.pnospring);
 
                 Kspace = linspace(Ksel(1), Ksel(2), Ksel(3));
 
@@ -558,91 +558,84 @@ classdef geareval < handle
                     r.pspring_max(i) = max(abs(pspring));
                     r.pspring_max_rel(i) =  r.pspring_max(i)/r.pnospring_max;
     
-                    % mean power
-                    r.pspring_avg(i) = trapz(obj.profile.time, pspring)/obj.profile.period;
-                    r.pspring_avg_rel(i) =  r.pspring_avg(i)/r.pnospring_avg;                
+                    % std power
+                    r.pspring_std(i) =std(pspring);
+                    r.pspring_std_rel(i) =  r.pspring_std(i)/r.pnospring_std;                
                     
                     % energy consumption
-                    time = obj.profile.time;                
-                    r.espring(i) = trapz(time, pspring);
-                    r.espring_rel(i) =  r.espring(i)/r.enospring;
+                    % time = obj.profile.time;                
+                    % r.espring(i) = trapz(time, pspring);
+                    % r.espring_rel(i) =  r.espring(i)/r.enospring;
               
                 end
 
-                % RMS motor torque, varied K
+                % relative metrics figure, varied K
                 figs(1) = figure;
-                plot(Kspace, r.mspring_rms_rel)                           
+                lgd = cell(0);
+                hold on
+                plot(Kspace, r.mspring_rms_rel, 'r')   
+                lgd = horzcat(lgd, {'r_{\tau,rms}'});
                 xlabel('K (Nm/rad)')
-                ylabel('relative rms torque')
-                title("Relative rms motor torque, N="  + string(Nsel))
+                ylabel('r')
+                title("Relative metrics, N="  + string(Nsel))
                 
                 Kzci = obj.zci(r.mspring_rms_rel-1);
                 try
                     r.K_be_rms_tor = Kspace(Kzci(1));
+                    [min_rms_tor,idxmin] = min(r.mspring_rms_rel);
+                    r.K_min_rms_tor = Kspace(idxmin);
+                    % plot break-even and min markers
+                    plot(r.K_be_rms_tor,1,'xr','MarkerSize',10, LineWidth=1.5);
+                    plot(r.K_min_rms_tor,min_rms_tor,'or','MarkerSize',10,  LineWidth=1.5);
+                    lgd = horzcat(lgd, {'K_{eq,\tau, rms}', 'K_{min,\tau, rms}'});
                 catch ME
                      r.K_be_rms_tor = NaN;
+                     r.K_min_rms_tor = NaN;
+
                 end
 
-                [min_rms_tor,idxmin] = min(r.mspring_rms_rel);
-                r.K_min_rms_tor = Kspace(idxmin);
-                % plot break-even and min markers
-                hold on  
-                plot(Kspace, r.pspring_max_rel)
-                plot(r.K_be_rms_tor,1,'xk','MarkerSize',10, LineWidth=1.5);
-                plot(r.K_min_rms_tor,min_rms_tor,'ok','MarkerSize',10,  LineWidth=1.5);
+                xlim([Ksel(1)/2 Ksel(2)])
                 
-                xlim([Ksel(1)/2 Ksel(2)])
-                yline(1,'k--')
-                legend({'Relative rms motor torque', 'Relative peak motor power', 'K_{eq,\tau rms}', 'K_{min,\tau rms}', 'Break-even'});
-                hold off
-
-
                 % peak power, varied K
-                figs(2) = figure;
-                plot(Kspace, r.pspring_max_rel,'k')
-                hold on
-                yline(1,'k--')
-                hold off
-                xlabel('K (Nm/rad)')
-                ylabel('relative peak power')
-                title("Relative motor peak power, N="  + string(Nsel))
-                xlim([Ksel(1)/2 Ksel(2)])
-                hold off
+                plot(Kspace, r.pspring_max_rel,'b')
+                lgd = horzcat(lgd, {'r_{P,max}'});
                 Kzci = obj.zci(r.pspring_max_rel-1);
-
                 try
                     r.K_be_pk_p = Kspace(Kzci(1));
+                    [min_pk_p,idxmin] = min(r.pspring_max_rel);
+                    r.K_min_pk_p = Kspace(idxmin);
+                    % plot break-even and min markers
+                    plot(r.K_be_pk_p,1,'xb','MarkerSize',10, LineWidth=1.5);
+                    plot(r.K_min_pk_p,min_pk_p,'ob','MarkerSize',10,  LineWidth=1.5);
+                    lgd = horzcat(lgd, {'K_{eq,P, max}', 'K_{min,P, max}'});
                 catch ME
                     r.K_be_pk_p = NaN;
-                end
-                
-                [~,idxmin] = min(r.pspring_max_rel);
-                r.K_min_pk_p = Kspace(idxmin);
-                if r.K_min_pk_p == Ksel(2)
                     r.K_min_pk_p = NaN;
                 end
-
-                % mean power, varied K
-                figs(3) = figure;
-                plot(Kspace, r.pspring_avg_rel)
-                hold on
-                yline(1,'k')
-                hold off
-                xlabel('K (Nm/rad)')
-                ylabel('relative average power')
-                title("Relative motor average power, N="  + string(Nsel))
-                xlim(Ksel(1:2))
-                hold off
-
-                Kzci = obj.zci(r.pspring_avg_rel-1);
+                
+                % std of power, varied K
+                plot(Kspace, r.pspring_std_rel,'g')  
+                lgd = horzcat(lgd, {'r_{P,std}'});
+                Kzci = obj.zci(r.pspring_std_rel-1);
                 try
-                    r.K_be_avg_p = Kspace(Kzci(1));
+                    r.K_be_std_p = Kspace(Kzci(1));
+                    [min_std_p,idxmin] = min(r.pspring_std_rel);
+                    r.K_min_std_p = Kspace(idxmin);
+                    % plot break-even and min markers
+                    plot(r.K_be_std_p,1,'xg','MarkerSize',10, LineWidth=1.5);
+                    plot(r.K_min_std_p,min_std_p,'og','MarkerSize',10,  LineWidth=1.5);
+                    lgd = horzcat(lgd, {'K_{eq,P, std}', 'K_{min,P, std}'});
                 catch ME
-                    r.K_be_avg_p = NaN;
+                    r.K_be_std_p = NaN;
+                    r.K_min_std_p = NaN;
                 end
                 
-                [~,idxmin] = min(r.pspring_avg_rel);
-                r.K_min_avg_p = Kspace(idxmin);
+                
+                yline(1,'k--')
+                lgd = horzcat(lgd, {'r = 1 (Break-even)'});
+                hold off
+
+                legend(lgd);
 
 
                 % % energy consumption, varied K
@@ -705,6 +698,37 @@ classdef geareval < handle
 
             fig=figure;
             boxplot([mins;maxs],varargin)
+            xtickangle(90)
+            set(gca,'XGrid','off','YGrid','on');
+            ylim([min(mins)-10, max(maxs)+10])
+            title("Feasible Reduction")
+            ylabel('Reduction ratio N')
+            %fig.Visible = "on";
+        end
+
+        function [fig] = feasableBoxplotBounds(obj)
+            arguments (Input)
+                obj geareval
+            end
+
+            obj=obj(:)';    % make row vector of objects
+
+            for i = 1:numel(obj)
+                try 
+                    mins(i) = obj(i).results.minN;
+                    maxs(i) = obj(i).results.maxN;
+                    optTrms(i) = obj(i).results.optN;
+                    center(i) = mean([mins(i) maxs(i)]);
+                catch ME
+                    mins= NaN;
+                    maxs(i) = NaN;
+                    optTrms(i) = NaN;
+                    center(i) = NaN;
+                end
+            end
+            
+            fig=figure;
+            boxplot([mins' center' maxs'],{'Lower bound', 'Center', 'Upper bound'})
             xtickangle(90)
             set(gca,'XGrid','off','YGrid','on');
             ylim([min(mins)-10, max(maxs)+10])
