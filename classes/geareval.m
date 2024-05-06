@@ -720,7 +720,7 @@ classdef geareval < handle
                     optTrms(i) = obj(i).results.optN;
                     center(i) = mean([mins(i) maxs(i)]);
                 catch ME
-                    mins= NaN;
+                    mins(i)= NaN;
                     maxs(i) = NaN;
                     optTrms(i) = NaN;
                     center(i) = NaN;
@@ -736,6 +736,43 @@ classdef geareval < handle
             ylabel('Reduction ratio N')
             %fig.Visible = "on";
         end
+
+        function [fig] = feasableStaircase(obj,Npoints)
+            arguments (Input)
+                obj geareval
+                Npoints (1,1) {mustBeInteger, mustBePositive, mustBeScalarOrEmpty, mustBeNonempty}
+            end
+
+            obj=obj(:)';    % make row vector of objects
+
+            for i = 1:numel(obj)
+                try 
+                    mins(i) = obj(i).results.minN;
+                    maxs(i) = obj(i).results.maxN;
+                    optTrms(i) = obj(i).results.optN;
+                    center(i) = mean([mins(i) maxs(i)]);
+                catch ME
+                    mins(i)= NaN;
+                    maxs(i) = NaN;
+                    optTrms(i) = NaN;
+                    center(i) = NaN;
+                end
+            end
+            
+            fig=figure;
+            startN = floor(min(mins));
+            stopN = ceil(max(maxs));
+            Nrange = linspace(startN,stopN,Npoints);
+            for i = 1:Npoints
+                Nthis = Nrange(i);
+                feascount(i) = sum(Nthis > mins & Nthis<maxs,"all");
+            end
+            plot(Nrange,feascount)
+            xlabel('Reduction ratio N')
+            ylabel('Feasible profiles')
+            ylim([0, numel(obj)]);
+        end
+
     end
 
     methods (Static)
