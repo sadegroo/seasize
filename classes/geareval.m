@@ -279,7 +279,7 @@ classdef geareval < handle
                 [C3,h3] = contourf(X,Y,pspring_std_rel, 0:0.1:1.1);
                 clabel(C3,h3)
                 ylabel('Reduction Ratio N', "Interpreter","none");                
-                xlabel('Spring rate (Nm/rad)', "Interpreter","none");
+                xlabel('Spring rate K (Nm/rad)', "Interpreter","none");
                 hold on
                 plot(Krange_eval(idxminmrms(:)),Nrange_eval, 'r', LineWidth=1);
                 plot(Krange_eval(idxminpstd(:)),Nrange_eval, 'g',LineWidth=1);
