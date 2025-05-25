@@ -78,13 +78,17 @@ classdef geareval < handle
             Tmotmax = obj.mot.peaktorque/f1;
             Tmotrms = obj.mot.rmstorque/f1;    
             
-            N = linspace(1,Nmax, nN);
-            N=N(:) * f2;             % make column vector and normalize
+            N_nonorm = linspace(1,Nmax, nN);
+            N=N_nonorm(:) * f2;             % make column vector and normalize
             omeganorm = zeros(nN,1);
             momentnormRms = zeros(nN,1);
             momentnormMax = zeros(nN,1);
+            cond0 = false(nN,1);
 
             for i = 1:nN
+                % Check if any limit (speed, torque, back-EMF is being exceeded.
+                res_temp = obj.margins(N_nonorm(i),'visualize', false);
+                cond0(i) = ~any(res_temp.limitcheck); 
                 omeganorm(i) = max(abs(obj.profile.anglevel)).* N(i);
                 momentnormRms(i) =  rms(obj.assistfactor*obj.profile.load ./ N(i) + N(i).*obj.profile.angleaccel);
                 momentnormMax(i) = max(abs(obj.assistfactor*obj.profile.load./N(i) + N(i).*obj.profile.angleaccel));
@@ -92,12 +96,13 @@ classdef geareval < handle
            
             cond1 = Tmotrms > momentnormRms;
             cond2 = Tmotmax > momentnormMax;
-            cond3 = wmot > omeganorm;
+            %cond3 = wmot > omeganorm; % technically not needed with more granular check in obj.margins
             [~,idmin] = min(momentnormRms);
             %cond4 = [true(idmin,1);false(Npoints-idmin,1)];
+            
             Nfeas1 = N(cond1); %rms torque conditions
             Nfeas2 = N(cond2); %peak torque conditions
-            Nfeas = N(cond1&cond2&cond3); %all conditions
+            Nfeas = N(cond0 & cond1); %all conditions (cond0 includes cond2)
             %Nfeas = N(cond1&cond3); %ignore peak condition
             %Nfeasrange = [min(Nfeas),min(Nfeas)/f2; max(Nfeas),max(Nfeas)/f2];
             if isempty(Nfeas)
@@ -323,87 +328,90 @@ classdef geareval < handle
 
             check =  @(x) isa(x,'double')&&isequal(size(x),[1 1]) ;
             addParameter(p, 'K', [], check);                     % A range of K to be evaluated for each evaluated gearbox ratio
-                        
+            addParameter(p, 'visualize',true, @(x) islogical(x))
+
             parse(p,varargin{:});
 
             Ksel = p.Results.K;
 
             for j = 1:numel(obj)
 
-            m_temp = obj(j).assistfactor*obj(j).profile.load ./ (Nsel*obj(j).efficiency) + obj(j).mot.inertia * Nsel * obj(j).profile.angleaccel;
-            omega_temp = obj(j).profile.anglevel * Nsel;
-
-            m_temp_nospring = m_temp;
-            omega_temp_nospring = omega_temp;
-
-            if obj(j).issea && ~isempty(Ksel)
-                m_temp = (obj(j).profile.load*obj(j).assistfactor/obj(j).efficiency + obj(j).mot.inertia*Nsel^2*(obj(j).profile.angleaccel+obj(j).profile.loadaccel*obj(j).assistfactor/Ksel))/Nsel;
-                omega_temp = (obj(j).profile.anglevel + obj(j).profile.loadvel*obj(j).assistfactor/Ksel)*Nsel;
-            end
-            
-            % motor limit vals
-            motpktor = obj(j).mot.peaktorque; % in Nm
-            motnomtor = obj(j).mot.nomtorque;  % in Nm
-            motstalltor = obj(j).mot.stalltorque; % in Nm
-            motnomspd = obj(j).mot.nomspeed;    % in rad/s
-            motnlspd = obj(j).mot.noloadspeed;  % in rad/s
-
-           % motor speed-load char
-           spdtorcharpos = @(x)  max((-motnomtor/(motnlspd-motnomspd))*(x-motnlspd), ...
-               (motnomtor-motstalltor)/(motnomspd)*x + motstalltor);
-           spdtorcharneg = @(x) -spdtorcharpos(-x);
-
-            % check motor limits here: true= limit breached
-           results(j).limitcheck(1) = any(m_temp>motpktor | m_temp<-motpktor);    % peaktorque
-           results(j).limitcheck(2) = any(omega_temp>motnlspd | omega_temp<-motnlspd);         % max speed
-           results(j).limitcheck(3) = any(m_temp > spdtorcharpos(omega_temp) | m_temp < spdtorcharneg(omega_temp)); %speed-torque char
-           
-            omega_load_max_atmot = max(abs(omega_temp));
-            moment_load_rms_atmot =  rms(m_temp);
-            moment_load_max_atmot = max(abs(m_temp));
-           
-            results(j).speed_margin = (obj(j).mot.nomspeed - omega_load_max_atmot)/obj(j).mot.nomspeed;
-            results(j).moment_margin_rms = (obj(j).mot.rmstorque - moment_load_rms_atmot)/obj(j).mot.rmstorque;
-            results(j).moment_margin_max = (obj(j).mot.peaktorque - moment_load_max_atmot)/obj(j).mot.peaktorque;
-
-            fig(j) = figure;
-
-            vec_w= 0:0.1:motnlspd;
-            vec_T= spdtorcharpos(vec_w);
-            
-            if obj(j).issea && ~isempty(Ksel)
-                % Verify that profiles are withing motor physical limits due to back emf
-                plot(omega_temp,m_temp)
-                hold on
-                plot(omega_temp_nospring,m_temp_nospring)
-                plot(vec_w,vec_T,'k--',-1*vec_w, -1*vec_T, 'k--')
-                yline(obj(j).mot.peaktorque,'k--')
-                yline(-obj(j).mot.peaktorque,'k--')
-                xline(obj(j).mot.noloadspeed,'k--')
-                xline(-obj(j).mot.noloadspeed,'k--')
-                xlim([-obj(j).mot.noloadspeed*1.1, obj(j).mot.noloadspeed*1.1]);
-                ylim([obj(j).mot.peaktorque*(-1.1) obj(j).mot.peaktorque*(1.1)]);
-                legend({'With spring', 'No spring', 'Motor limits'}, "Location","best")
-                xlabel('$\omega_{mot}$ (rad/s)', Interpreter='latex')
-                ylabel('$\tau_{mot}$ (Nm)', Interpreter='latex')
-                title("Motor physical limit check, profile=" + obj(j).profile.description + ", N=" + string(Nsel) + ", K=" +string(Ksel) + " Nm/rad")
-            else
-                 % Verify that profiles are withing motor physical limits due to back emf
-                plot(omega_temp,m_temp)
-                hold on
-                plot(vec_w,vec_T,'k--',-1*vec_w, -1*vec_T, 'k--')
-                yline(obj(j).mot.peaktorque,'k--')
-                yline(-obj(j).mot.peaktorque,'k--')
-                xline(obj(j).mot.noloadspeed,'k--')
-                xline(-obj(j).mot.noloadspeed,'k--')
-                xlim([-obj(j).mot.noloadspeed*1.1, obj(j).mot.noloadspeed*1.1]);
-                ylim([obj(j).mot.peaktorque*(-1.1) obj(j).mot.peaktorque*(1.1)]);
-                legend({'No spring', 'motor limits'}, "Location","best")
-                xlabel('Angular velocity at motor shaft (rad/s)')
-                ylabel('Torque at motor shaft (Nm)')
-                title("Motor physical limit check, profile=" + obj(j).profile.description + ", N=" + string(Nsel))
-            end
-            hold off
+                m_temp = obj(j).assistfactor*obj(j).profile.load ./ (Nsel*obj(j).efficiency) + obj(j).mot.inertia * Nsel * obj(j).profile.angleaccel;
+                omega_temp = obj(j).profile.anglevel * Nsel;
+    
+                m_temp_nospring = m_temp;
+                omega_temp_nospring = omega_temp;
+    
+                if obj(j).issea && ~isempty(Ksel)
+                    m_temp = (obj(j).profile.load*obj(j).assistfactor/obj(j).efficiency + obj(j).mot.inertia*Nsel^2*(obj(j).profile.angleaccel+obj(j).profile.loadaccel*obj(j).assistfactor/Ksel))/Nsel;
+                    omega_temp = (obj(j).profile.anglevel + obj(j).profile.loadvel*obj(j).assistfactor/Ksel)*Nsel;
+                end
+                
+                % motor limit vals
+                motpktor = obj(j).mot.peaktorque; % in Nm
+                motnomtor = obj(j).mot.nomtorque;  % in Nm
+                motstalltor = obj(j).mot.stalltorque; % in Nm
+                motnomspd = obj(j).mot.nomspeed;    % in rad/s
+                motnlspd = obj(j).mot.noloadspeed;  % in rad/s
+    
+               % motor speed-load char
+               spdtorcharpos = @(x)  max((-motnomtor/(motnlspd-motnomspd))*(x-motnlspd), ...
+                   (motnomtor-motstalltor)/(motnomspd)*x + motstalltor);
+               spdtorcharneg = @(x) -spdtorcharpos(-x);
+    
+                % check motor limits here: true= limit breached
+               results(j).limitcheck(1) = any(m_temp>motpktor | m_temp<-motpktor);    % peaktorque
+               results(j).limitcheck(2) = any(omega_temp>motnlspd | omega_temp<-motnlspd);         % max speed
+               results(j).limitcheck(3) = any(m_temp > spdtorcharpos(omega_temp) | m_temp < spdtorcharneg(omega_temp)); %speed-torque char
+               
+                omega_load_max_atmot = max(abs(omega_temp));
+                moment_load_rms_atmot =  rms(m_temp);
+                moment_load_max_atmot = max(abs(m_temp));
+               
+                results(j).speed_margin = (obj(j).mot.nomspeed - omega_load_max_atmot)/obj(j).mot.nomspeed;
+                results(j).moment_margin_rms = (obj(j).mot.rmstorque - moment_load_rms_atmot)/obj(j).mot.rmstorque;
+                results(j).moment_margin_max = (obj(j).mot.peaktorque - moment_load_max_atmot)/obj(j).mot.peaktorque;
+                
+                if p.Results.visualize
+                    fig(j) = figure;
+        
+                    vec_w= 0:0.1:motnlspd;
+                    vec_T= spdtorcharpos(vec_w);
+                    
+                    if obj(j).issea && ~isempty(Ksel)
+                        % Verify that profiles are withing motor physical limits due to back emf
+                        plot(omega_temp,m_temp)
+                        hold on
+                        plot(omega_temp_nospring,m_temp_nospring)
+                        plot(vec_w,vec_T,'k--',-1*vec_w, -1*vec_T, 'k--')
+                        yline(obj(j).mot.peaktorque,'k--')
+                        yline(-obj(j).mot.peaktorque,'k--')
+                        xline(obj(j).mot.noloadspeed,'k--')
+                        xline(-obj(j).mot.noloadspeed,'k--')
+                        xlim([-obj(j).mot.noloadspeed*1.1, obj(j).mot.noloadspeed*1.1]);
+                        ylim([obj(j).mot.peaktorque*(-1.1) obj(j).mot.peaktorque*(1.1)]);
+                        legend({'With spring', 'No spring', 'Motor limits'}, "Location","best")
+                        xlabel('$\omega_{mot}$ (rad/s)', Interpreter='latex')
+                        ylabel('$\tau_{mot}$ (Nm)', Interpreter='latex')
+                        title("Motor physical limit check, profile=" + obj(j).profile.description + ", N=" + string(Nsel) + ", K=" +string(Ksel) + " Nm/rad")
+                    else
+                         % Verify that profiles are withing motor physical limits due to back emf
+                        plot(omega_temp,m_temp)
+                        hold on
+                        plot(vec_w,vec_T,'k--',-1*vec_w, -1*vec_T, 'k--')
+                        yline(obj(j).mot.peaktorque,'k--')
+                        yline(-obj(j).mot.peaktorque,'k--')
+                        xline(obj(j).mot.noloadspeed,'k--')
+                        xline(-obj(j).mot.noloadspeed,'k--')
+                        xlim([-obj(j).mot.noloadspeed*1.1, obj(j).mot.noloadspeed*1.1]);
+                        ylim([obj(j).mot.peaktorque*(-1.1) obj(j).mot.peaktorque*(1.1)]);
+                        legend({'No spring', 'motor limits'}, "Location","best")
+                        xlabel('Angular velocity at motor shaft (rad/s)')
+                        ylabel('Torque at motor shaft (Nm)')
+                        title("Motor physical limit check, profile=" + obj(j).profile.description + ", N=" + string(Nsel))
+                    end
+                    hold off
+                end
             end
 
         end
