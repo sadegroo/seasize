@@ -7,3 +7,4 @@ data/TD.mat
 shaft_conic_fit.mlx
 *.tex
 oo_scripts/Lerner_hipexo_check.mlx
+optim/cvx_bolivar/data/

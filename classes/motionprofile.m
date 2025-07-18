@@ -5,15 +5,18 @@ classdef motionprofile < handle
     properties
         description                         % text description of load profile
         time                                % time vector in seconds
-        freq                                % frequency vector in radians
+        freqwrap                            % wrapped frequency vector in Hz (incl negative frequencies at end)
+        freqssb                             % SSB frequency vector in Hz
         angle                               % position vector in radians
-        anglefft                            % Single-side band FFT of angle
+        angle_unfiltered                    % UNFILTERED position vector in radians
+        anglefft                            % FFT of angle
         anglevel_unfiltered                 % UNFILTERED velocity vector in rad/s 
         anglevel                            % velocity vector in rad/s   
         angleaccel_unfiltered               % UNFILTERED acceleration vector in rad/s²
         angleaccel                          % acceleration vector in rad/s²
         load                                % load vector in Nm
         load_unfiltered                     % UNFILTERED load vector in Nm
+        loadfft                             % FFT of load
         loadvel                             % load velocity vector in Nm/s
         loadvel_unfiltered                  % UNFILTERED load velocity vector in Nm/s
         loadaccel                           % load acceleration vector in Nm/s²
@@ -24,6 +27,7 @@ classdef motionprofile < handle
         Npoints                             % number of profile points
         poslp                               % position vector lowpass filter frequency [Hz]
         loadlp                              % load vector lowpass filter frequency [Hz]
+        fourier_ord                         % Order of Fourier series approx., if applicable. 2-vector with first element position and 2nd load                            
                
     end
     
@@ -46,9 +50,11 @@ classdef motionprofile < handle
             p = inputParser;
 
             checkDoubleScalar = @(x) isscalar(x)&&isa(x,'double') ;
+            checkintergerNonnegScalar = @(x) isvector(x) && all(x>=0);
             addParameter(p, 'period', [], checkDoubleScalar);
             addParameter(p, 'poslp', [], checkDoubleScalar);
             addParameter(p, 'loadlp', [], checkDoubleScalar);
+            addParameter(p, 'fourier', [], checkintergerNonnegScalar); 
             
             parse(p,varargin{:});
 
@@ -75,8 +81,13 @@ classdef motionprofile < handle
                 obj.loadlp = 1/obj.time(end)*4; % 4x the fundamental frequency
             end
 
-            obj.angle = positionvec(:);
-            obj.load = loadvec(:);
+            if ~isempty(p.Results.fourier)
+                obj.fourier_ord = floor(p.Results.fourier);
+            else
+                obj.fourier_ord = 0; % do not use Fourier series
+            end
+
+
             obj.description = description;
             obj.Npoints = length(obj.time);
             
@@ -86,28 +97,47 @@ classdef motionprofile < handle
             % [b1,a1] = butter(min(obj.Npoints/3-1,20),obj.poslp/(fs/2)); % high order BW filter for filtfilt
             % [b2,a2] = butter(min(obj.Npoints/3-1,20),obj.loadlp/(fs/2)); % high order BW filter for filtfilt
 
-            obj.angle = positionvec(:);
-            [obj.freq, obj.anglefft] = obj.FFT(obj.angle);
+            obj.angle_unfiltered = positionvec(:);
+            obj.anglevel_unfiltered = obj.first_derivative_5pt(obj.angle_unfiltered,timestep); 
+            obj.angleaccel_unfiltered = obj.second_derivative_5pt(obj.angle_unfiltered,timestep);
 
-            obj.anglevel_unfiltered = gradient(obj.angle,timestep);  
-            obj.anglevel = lowpass(obj.anglevel_unfiltered,obj.poslp,fs);
-            %obj.anglevel = filtfilt(b1,a1, obj.anglevel_unfiltered);
-
-            obj.angleaccel_unfiltered = gradient(obj.anglevel_unfiltered,timestep);
-            obj.angleaccel = lowpass(gradient(obj.anglevel,timestep),obj.poslp,fs);
-            %obj.angleaccel = filtfilt(b1,a1,gradient(obj.anglevel,timestep));
-            
             obj.load_unfiltered = loadvec(:);
-            obj.load = lowpass(obj.load_unfiltered,obj.loadlp,fs);
-            %obj.load = filtfilt(b2,a2,obj.load_unfiltered);
+            obj.loadvel_unfiltered = obj.first_derivative_5pt(obj.load_unfiltered, timestep);
+            obj.loadaccel_unfiltered = obj.second_derivative_5pt(obj.load_unfiltered, timestep);
+            
+            % do FFT
+            [obj.freqssb, obj.anglefft, ~,~,~,~, obj.freqwrap] = obj.FFT(obj.angle_unfiltered);
+            [obj.freqssb, obj.loadfft] = obj.FFT(obj.load_unfiltered);
 
-            obj.loadvel_unfiltered = gradient(obj.load_unfiltered, timestep);
-            obj.loadvel = lowpass(gradient(obj.load, timestep),obj.loadlp,fs);
-            %obj.loadvel = filtfilt(b2,a2,gradient(obj.load, timestep));
+            if obj.fourier_ord == 0
+                obj.angle = obj.angle_unfiltered;
+                 
+                obj.anglevel = lowpass(obj.anglevel_unfiltered,obj.poslp,fs);
+                %obj.anglevel = filtfilt(b1,a1, obj.anglevel_unfiltered);
+    
+                obj.angleaccel = lowpass(obj.angleaccel_unfiltered,obj.poslp,fs);
+                %obj.angleaccel = filtfilt(b1,a1,gradient(obj.anglevel,timestep));
+                
+                obj.load = lowpass(obj.load_unfiltered,obj.loadlp,fs);
+                %obj.load = filtfilt(b2,a2,obj.load_unfiltered);    
+                
+                obj.loadvel = lowpass(obj.first_derivative_5pt(obj.load,timestep),obj.loadlp,fs);
+                %obj.loadvel = filtfilt(b2,a2,gradient(obj.load, timestep));
+    
+                obj.loadaccel = lowpass(obj.second_derivative_5pt(obj.load,timestep),obj.loadlp,fs);
+                %obj.loadaccel = filtfilt(b2,a2,gradient(obj.loadvel, timestep));
 
-            obj.loadaccel_unfiltered = gradient(obj.loadvel_unfiltered, timestep);
-            obj.loadaccel = lowpass(gradient(obj.loadvel, timestep),obj.loadlp,fs);
-            %obj.loadaccel = filtfilt(b2,a2,gradient(obj.loadvel, timestep));
+            else % use fourier
+                % position and derivatives
+                obj.angle = obj.eval_dfourier(obj.freqwrap, obj.anglefft,  obj.fourier_ord(1),0, obj.time);
+                obj.anglevel = obj.eval_dfourier(obj.freqwrap, obj.anglefft, obj.fourier_ord(1),1, obj.time);
+                obj.angleaccel = obj.eval_dfourier(obj.freqwrap, obj.anglefft, obj.fourier_ord(1),2, obj.time);
+
+                obj.load = obj.eval_dfourier(obj.freqwrap, obj.loadfft,  obj.fourier_ord(1),0, obj.time);
+                obj.loadvel = obj.eval_dfourier(obj.freqwrap, obj.loadfft, obj.fourier_ord(1),1, obj.time);
+                obj.loadaccel = obj.eval_dfourier(obj.freqwrap, obj.loadfft, obj.fourier_ord(1),2, obj.time);
+
+            end
 
             obj.rmsload = rms(obj.load);
             if abs(max(obj.load)) >= abs(min(obj.load))
@@ -121,7 +151,10 @@ classdef motionprofile < handle
             f=figure('Name', char(obj.description));
             
             subplot(6,1,1);
+            plot(obj.time,obj.angle_unfiltered);
+            hold on
             plot(obj.time,obj.angle);
+            hold off
             grid on
             ylabel({'Angle', '(rad)'})
             %title(['Motion-load Profile: ' char(obj.description)])
@@ -314,7 +347,7 @@ classdef motionprofile < handle
          end
     end
     methods (Access=private)
-        function [f,X, Mag, Phase,Pow,CumPow] = FFT(obj, signal)
+        function [fssb,X, Mag, Phase,Pow,CumPow, fwrap] = FFT(obj, signal)
             L=length(signal);
             signal = signal(:);
             Fs = (L-1)/obj.period ;           % Sampling frequency
@@ -328,18 +361,15 @@ classdef motionprofile < handle
             Ts_up = 1/Fs_up;
             t_up = 0:Ts_up:(N-1)*Ts_up;   
             signal_upsampled = interp1(t,signal', t_up)';
-
-            % figure
-            % plot(t,signal)
-            % hold on
-            % plot(t_up, signal_upsampled)
-            % hold off
+            
+            % frequency vectors
+            fssb = (0:N/2-1)*(Fs_up/N);
+            fwrap = [(0:Fs_up/N:Fs_up/2) (-Fs_up/2+Fs_up/N:Fs_up/N:-Fs_up/N)];
 
             % FFT
             X = fft(signal_upsampled,N);
             SSB = X(1:N/2);
             SSB(2:end) = 2*SSB(2:end);
-            f = (0:N/2-1)*(Fs_up/N);
 
             Mag = abs(SSB/N);
             Phase = angle(SSB);
@@ -347,7 +377,126 @@ classdef motionprofile < handle
             CumPow = cumsum(Pow);
 
         end
+        
+        % Note: ifft not needed 
+        % function y = eval_fourier_ifft(obj,Y,order)  
+        %     % this function returns the truncated Fourier series up to
+        %     % order 'order', of the fft output vector Y, and donwsamples it to the
+        %     % samplerate of the original signal
+        %     Nfft = length(Y);
+        %     bins = order+1; % amount of bins to retain
+        %     Y_trunc = Y; 
+        %     Y_trunc(bins+1:end-bins+1) = 0; % remove unwanted bins
+        % 
+        %     y = interp1(1:Nfft, ifft(Y_trunc,"symmetric"), linspace(1,Nfft,obj.Npoints),"linear");
 
-    end
+        % end
+    end % Methods
+
+     methods (Static)
+        function df = first_derivative_5pt(f, delta)
+            % Computes the first derivative using the fourth-order (five-point) finite difference.
+            % Input:
+            %   f     - vector of function values [f1, f2, ..., fn]
+            %   delta - uniform spacing between points
+            % Output:
+            %   df    - vector of first derivative approximations
+
+            assert(length(f) >=5 ,'Less than 5 points for finite difference derivatives!')
+            
+            n = length(f);
+            df = zeros(size(f)); % preallocate
+            
+            % Left boundary: f'_1
+            df(1) = (1/(12*delta)) * (-25*f(1) + 48*f(2) - 36*f(3) + 16*f(4) - 3*f(5));
+            
+            % Near-left boundary: f'_2
+            df(2) = (1/(12*delta)) * (-3*f(1) - 10*f(2) + 18*f(3) - 6*f(4) + f(5));
+            
+            % Interior points: f'_k for k = 3 to n-2
+            for k = 3:n-2
+                df(k) = (1/(12*delta)) * (-f(k+2) + 8*f(k+1) - 8*f(k-1) + f(k-2));
+            end
+            
+            % Near-right boundary: f'_{n-1}
+            df(n-1) = (1/(12*delta)) * (-f(n-4) + 6*f(n-3) - 18*f(n-2) + 10*f(n-1) + 3*f(n));
+            
+            % Right boundary: f'_n
+            df(n) = (1/(12*delta)) * (3*f(n-4) - 16*f(n-3) + 36*f(n-2) - 48*f(n-1) + 25*f(n));
+            
+        end
+
+        function d2f = second_derivative_5pt(f, delta)
+            % Computes the second derivative using the fourth-order (five-point) finite difference.
+            % Input:
+            %   f     - vector of function values [f1, f2, ..., fn]
+            %   delta - uniform spacing between points
+            % Output:
+            %   d2f   - vector of second derivative approximations
+
+            assert(length(f) >=5 ,'Less than 5 points for finite difference derivatives!')
+            
+            n = length(f);
+            d2f = zeros(size(f)); % preallocate
+            
+            % Left boundary: f''_1
+            d2f(1) = (1/(12*delta^2)) * ( ...
+                45*f(1) - 154*f(2) + 214*f(3) - 156*f(4) + 61*f(5) - 10*f(6) );
+            
+            % Near-left boundary: f''_2
+            d2f(2) = (1/(12*delta^2)) * ( ...
+                10*f(1) - 15*f(2) - 4*f(3) + 14*f(4) - 6*f(5) + f(6) );
+            
+            % Interior points: f''_k for k = 3 to n-2
+            for k = 3:n-2
+                d2f(k) = (1/(12*delta^2)) * ( ...
+                    -f(k-2) + 16*f(k-1) - 30*f(k) + 16*f(k+1) - f(k+2) );
+            end
+            
+            % Near-right boundary: f''_{n-1}
+            d2f(n-1) = (1/(12*delta^2)) * ( ...
+                f(n-5) - 6*f(n-4) + 14*f(n-3) - 4*f(n-2) - 15*f(n-1) + 10*f(n) );
+            
+            % Right boundary: f''_n
+            d2f(n) = (1/(12*delta^2)) * ( ...
+                -10*f(n-5) + 61*f(n-4) - 156*f(n-3) + 214*f(n-2) - 154*f(n-1) + 45*f(n) );
+            
+        end
+
+
+        function f_val = eval_dfourier(fwrap, fft_vals, k, m, t_eval)
+        % EVAL_DFOURIER Evaluates a derivative of the the Fourier series at a specific time
+        %   f_val = evaluate_fourier_series(fft_vals, T, t_eval, k, m)
+        %
+        %   fwrap    : frequency bin center values corresponding with fft_vals
+        %   fft_vals : The FFT output of the original signal (complex values)        
+        %   k        : The number of harmonics (positive and negative) to include
+        %   m        : Order of the derivative, 0 means no derivative
+        %   t_eval   : The time (or array of times) at which to evaluate the series
+        
+            N = length(fft_vals);          % Number of FFT points
+            n = -k:k;                      % Harmonic indices
+            t_eval = t_eval(:)';           % Ensure row vector for broadcasting
+            fwrap = fwrap(:)';
+        
+            % FFT indices wrap around from 0 to N-1 (1-based index for MATLAB)
+            % Negative frequencies are in fft_vals(N-k+1:N), positive in fft_vals(2:k+1)
+            X_k = zeros(size(n));
+            fwrap_k = X_k;
+        
+            for k = 1:length(n)
+                idx = mod(n(k), N) + 1;    % Wrap index to 1-based MATLAB indexing
+                fwrap_k(k) = fwrap(idx);
+                X_k(k) = fft_vals(idx) / N * (1i * 2 * pi * fwrap_k(k))^m; %get fft val and modify for m-th derivative
+            end
+        
+            % Evaluate the Fourier series
+            exponents = exp(1i * 2 * pi * fwrap_k' * t_eval);
+            f_val = real(X_k * exponents);  % Take real part, as signal is real
+
+        end
+    
+
+     end % methods (Static)
 end
 
