@@ -129,13 +129,13 @@ classdef motionprofile < handle
 
             else % use fourier
                 % position and derivatives
-                obj.angle = obj.eval_dfourier(obj.freqwrap, obj.anglefft,  obj.fourier_ord(1),0, obj.time);
-                obj.anglevel = obj.eval_dfourier(obj.freqwrap, obj.anglefft, obj.fourier_ord(1),1, obj.time);
-                obj.angleaccel = obj.eval_dfourier(obj.freqwrap, obj.anglefft, obj.fourier_ord(1),2, obj.time);
+                obj.angle = (obj.eval_dfourier(obj.freqwrap, obj.anglefft,  obj.fourier_ord(1),0, obj.time))';
+                obj.anglevel = (obj.eval_dfourier(obj.freqwrap, obj.anglefft, obj.fourier_ord(1),1, obj.time))';
+                obj.angleaccel = (obj.eval_dfourier(obj.freqwrap, obj.anglefft, obj.fourier_ord(1),2, obj.time))';
 
-                obj.load = obj.eval_dfourier(obj.freqwrap, obj.loadfft,  obj.fourier_ord(1),0, obj.time);
-                obj.loadvel = obj.eval_dfourier(obj.freqwrap, obj.loadfft, obj.fourier_ord(1),1, obj.time);
-                obj.loadaccel = obj.eval_dfourier(obj.freqwrap, obj.loadfft, obj.fourier_ord(1),2, obj.time);
+                obj.load = (obj.eval_dfourier(obj.freqwrap, obj.loadfft,  obj.fourier_ord(2),0, obj.time))';
+                obj.loadvel = (obj.eval_dfourier(obj.freqwrap, obj.loadfft, obj.fourier_ord(2),1, obj.time))';
+                obj.loadaccel = (obj.eval_dfourier(obj.freqwrap, obj.loadfft, obj.fourier_ord(2),2, obj.time))';
 
             end
 
@@ -353,25 +353,18 @@ classdef motionprofile < handle
             Fs = (L-1)/obj.period ;           % Sampling frequency
             Ts=1/Fs;
             t = 0:Ts:(L-1)*Ts;    %time vector
-
-            N = 2^nextpow2(L); % FFT points
-            
-            % upsample to N using linear interpollation
-            Fs_up = (N-1)/obj.period;
-            Ts_up = 1/Fs_up;
-            t_up = 0:Ts_up:(N-1)*Ts_up;   
-            signal_upsampled = interp1(t,signal', t_up)';
             
             % frequency vectors
-            fssb = (0:N/2-1)*(Fs_up/N);
-            fwrap = [(0:Fs_up/N:Fs_up/2) (-Fs_up/2+Fs_up/N:Fs_up/N:-Fs_up/N)];
+            fssb = (0:L/2-1)*(Fs/L);
+            fwrap = Fs * (-floor(L/2):ceil(L/2)-1)/L;
+            fwrap = circshift(fwrap, [0, floor(L/2)+1]);
 
             % FFT
-            X = fft(signal_upsampled,N);
-            SSB = X(1:N/2);
+            X = fft(signal);
+            SSB = X(1:ceil(L/2));
             SSB(2:end) = 2*SSB(2:end);
 
-            Mag = abs(SSB/N);
+            Mag = abs(SSB/L);
             Phase = angle(SSB);
             Pow =Mag.^2;
             CumPow = cumsum(Pow);
